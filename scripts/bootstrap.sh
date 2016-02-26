@@ -91,16 +91,6 @@ function test_current_postgres_install()
     fi
 }
 
-function can_use_binaries()
-{
-    PGVERSION=$(pg_config --version | cut -d' ' -f2)
-    TARBASE="quasar_fdw-${ARCH}-${PGVERSION}-${FDWVERSION}"
-    TAR="${FDWCLONEURL}/releases/download/${FDWVERSION}/${TARBASE}.tar.gz"
-    log "Querying for binaries: $TAR"
-    if [[ -z $(curl $TAR -XHEAD --head 2>/dev/null | grep "302 Found") ]]; then
-        USE_SOURCE=1
-    fi
-}
 
 function install_binaries()
 {

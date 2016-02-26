@@ -961,6 +961,7 @@ quasarIterateForeignScan(ForeignScanState *node)
     ExprContext *econtext;
 
     elog(DEBUG4, "entering function %s", __func__);
+    elog(DEBUG4, "Testing Debug levels by Jesse");
 
     fsstate = (QuasarFdwScanState *)node->fdw_state;
     slot = node->ss.ss_ScanTupleSlot;
