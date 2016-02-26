@@ -13,6 +13,11 @@
  *
  *-------------------------------------------------------------------------
  */
+#define JESSEDEBUG 1
+#ifdef JESSEDEBUG
+#include <stdio.h>
+#endif /*JESSEDEBUG*/
+
 #include "postgres.h"
 #include "quasar_fdw.h"
 #include "curl/curl.h"
@@ -21,7 +26,7 @@
 #include "utils/memutils.h"
 
 #define INITIAL_TUPLE_ALLOC_SIZE 100;
-
+#define MAXQUERYLENCHECK 100
 
 
 char * execute_info_curl(QuasarConn *conn, char *url);
@@ -137,7 +142,19 @@ extern void
 QuasarExecuteQuery(QuasarConn *conn, char *query,
                    const char **param_values, size_t numParams)
 {
+<<<<<<< HEAD
     QuasarExecuteQueryGet(conn, query, param_values, numParams);
+=======
+    elog(DEBUG1, "quasar_fdw: query preview %s\n", query);
+    if (numParams > 0 || strnlen(query,MAXQUERYLENCHECK) >= MAXQUERYLENCHECK){
+	elog(DEBUG1, "executing post request");
+        QuasarExecuteQueryPost(conn, query, param_values, numParams);
+    }
+    else{
+	elog(DEBUG1, "executing get request");
+        QuasarExecuteQueryGet(conn, query);
+    }
+>>>>>>> jesse
 
     conn->ongoing_transfers = 1;
     conn->exec_transfer = 1;
@@ -156,10 +173,31 @@ void
 QuasarExecuteQueryGet(QuasarConn *conn, char *query,
                       const char **param_values, size_t numParams)
 {
+    elog(DEBUG1, "entering function %s", __func__);
     int sc, i;
+<<<<<<< HEAD
     CURL *curl = conn->curl;
     CURLM *curlm = conn->curlm;
     StringInfoData url, param;
+=======
+    int curl_return = -1;
+    CURL *curl = curl_easy_init();
+    CURLM *curlm = conn->curlm;
+    StringInfoData url;
+    StringInfoData param;
+    StringInfoData dest;
+    quasar_info_curl_context infoctx;
+    struct curl_slist *headers = NULL;
+    #ifdef JESSEDEBUG
+    FILE *filep = fopen("/home/ubuntu/jessedump.log", "wb");
+    #endif
+    curl_off_t size_of_query = (curl_off_t) strlen(query);
+    //char* url_encoded_query = curl_easy_escape(curl, query, 0); 
+
+    elog(DEBUG1, "Size of query %d", size_of_query);
+
+    Assert(conn->curlm != NULL && conn->qctx != NULL);
+>>>>>>> jesse
 
     initStringInfo(&url);
     initStringInfo(&param);
@@ -169,10 +207,72 @@ QuasarExecuteQueryGet(QuasarConn *conn, char *query,
 
     for (i = 0; i < numParams; ++i) {
         resetStringInfo(&param);
+<<<<<<< HEAD
         appendStringInfo(&param, "var.p%d", i+1);
         appendStringInfoQuery(curl, &url, param.data, param_values[i], false);
     }
 
+=======
+        appendStringInfo(&param, "p%d", i+1);
+	elog(DEBUG1, "Parameter Value %s", param_values[i]);
+        appendStringInfoQuery(curl, &url, param.data, param_values[i], i == 0);
+    }
+
+    initStringInfo(&dest);
+    appendStringInfo(&dest, "%s/fdw_%d", conn->path, rand());
+    conn->post_path = pstrdup(dest.data);
+    resetStringInfo(&dest);
+    appendStringInfo(&dest, "Destination: %s", conn->post_path);
+    headers = curl_slist_append(headers, dest.data);
+
+    elog(DEBUG1, "full url %s", dest.data);
+    /* Set up CURL instance. */
+    #ifdef JESSEDEBUG
+    curl_easy_setopt(curl, CURLOPT_STDERR, filep);
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+    #endif
+    curl_return = curl_easy_setopt(curl, CURLOPT_URL, url.data);
+    elog(DEBUG5, "curl_easy_setopt(curl, CURLOPT_URL, url.data) is %d", curl_return);
+    curl_return = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    elog(DEBUG5,  "curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers) is %d", curl_return);
+    curl_return = curl_easy_setopt(curl, CURLOPT_POSTFIELDS, query);
+    elog(DEBUG5,  "curl_easy_setopt(curl, CURLOPT_POSTFIELDS, query) is %d", curl_return);
+    //curl_easy_setopt(curl, CURLOPT_POSTFIELDS, url_encoded_query);
+    curl_return = curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "gzip");
+    elog(DEBUG5,  "curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, \"gzip\") is %d", curl_return);
+    curl_return = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_handler);
+    elog(DEBUG5,  "curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_handler) is %d", curl_return);
+    curl_return = curl_easy_setopt(curl, CURLOPT_HEADERDATA, &infoctx);
+    elog(DEBUG5,  "curl_easy_setopt(curl, CURLOPT_HEADERDATA, &infoctx) is %d", curl_return);
+    curl_return = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, throwaway_body_handler);
+    elog(DEBUG5,  "curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, throwaway_body_handler) is %d", curl_return);
+
+    elog(DEBUG1, "curling %s with query %s", url.data, query);
+    sc = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    //curl_free(url_encoded_query);
+
+    if (sc != CURLE_OK)
+    {
+        QuasarCleanupConnection(conn);
+        elog(ERROR, "quasar_fdw: curl %s failed: %s",
+             url.data, curl_easy_strerror(sc));
+    }
+
+    if (infoctx.status != 200)
+    {
+        QuasarCleanupConnection(conn);
+        elog(ERROR, "quasar_fdw: Got bad response from quasar: %d (%s)",
+             infoctx.status, url.data);
+    }
+
+    /* Ok now we go get the data */
+    curl = conn->curl;
+
+    resetStringInfo(&url);
+    appendStringInfo(&url, "%s/data/fs%s", conn->server, conn->post_path);
+>>>>>>> jesse
     conn->full_url = url.data;
 
     curl_easy_setopt(curl, CURLOPT_URL, url.data);
@@ -351,6 +451,7 @@ header_handler(void *buffer, size_t size, size_t nmemb, void *userp)
 
         status = atoi((char *) buffer + strlen(HTTP_1_1) + 1);
         elog(DEBUG1, "curl response status %d", status);
+        elog(DEBUG5, "curl response %s", (char *)buffer);
         ctx->status = status;
     }
 

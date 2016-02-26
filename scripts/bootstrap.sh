@@ -16,7 +16,6 @@
 #
 #-------------------------------------------------------------------------
 set -e
-
 ## Internal variables
 OS=
 OSTYPE=
@@ -62,7 +61,6 @@ function install()
     if [[ -z "$USE_SOURCE" ]]; then can_use_binaries; fi
     if [[ ! -z "$USE_SOURCE" ]]; then
         install_builddeps
-        install_yajl
         if [[ -z $NO_FDW ]]; then
             install_fdw
         fi
@@ -96,16 +94,6 @@ function test_current_postgres_install()
     fi
 }
 
-function can_use_binaries()
-{
-    PGVERSION=$(pg_config --version | cut -d' ' -f2)
-    TARBASE="quasar_fdw-${ARCH}-${PGVERSION}-${FDWVERSION}"
-    TAR="${FDWCLONEURL}/releases/download/${FDWVERSION}/${TARBASE}.tar.gz"
-    log "Querying for binaries: $TAR"
-    if [[ -z $(curl $TAR -XHEAD --head 2>/dev/null | grep "302 Found") ]]; then
-        USE_SOURCE=1
-    fi
-}
 
 function install_binaries()
 {
@@ -118,12 +106,14 @@ function install_binaries()
 
 function install_fdw()
 {
-    log "Installing Quasar FDW version $FDWVERSION"
-    (logx wget "$FDWCLONEURL/archive/$FDWVERSION.tar.gz" -O "quasar_fdw-$FDWVERSION.tar.gz") \
+    MYDR=$(pwd)
+    log "Installing Quasar FDW version $FDWVERSION from $MYDR"
+    (logx wget "$FDWCLONEURL/archive/$FDWVERSION.tar.gz" -O "$MYDR/quasar_fdw-$FDWVERSION.tar.gz") \
         || error "Getting FDW repository failed"
-    (logx tar xzvf "quasar_fdw-$FDWVERSION.tar.gz") \
+    (logx tar xzvf "$MYDR/quasar_fdw-$FDWVERSION.tar.gz") \
         || error "Untaring FDW repository failed"
-    mypushd "quasar_fdw-*"
+    logx rm "$MYDR/quasar_fdw-$FDWVERSION.tar.gz"
+    mypushd "$MYDR/quasar*"
     (logx make install) \
         || error "Error installing Quasar FDW"
     mypopd
